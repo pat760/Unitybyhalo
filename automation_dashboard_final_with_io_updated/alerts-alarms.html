@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Automation Telemetry Dashboard – Alerts &amp; Alarms</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+    <nav>
+        <a href="customer-details.html" class="nav-step completed">1. Customer Details</a>
+        <a href="payment.html" class="nav-step completed">2. Payment</a>
+        <a href="system-selection.html" class="nav-step completed">3. System Selection</a>
+        <a href="system-setup.html" class="nav-step completed">4. System Set up</a>
+        <a href="alerts-alarms.html" class="nav-step active">5. Alerts &amp; Alarms</a>
+        <a href="escalations.html" class="nav-step">6. Escalations</a>
+        <a href="io-wiring.html" class="nav-step">7. IO / Wiring Diagrams</a>
+    </nav>
+</header>
+    <div class="content">
+        <h1>Alerts &amp; Alarms</h1>
+        <p>Configure alerts and alarms for each component in your system. Select the alerts you wish to enable and provide any necessary thresholds.</p>
+        <div id="alerts-container"></div>
+        <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const container = document.getElementById('alerts-container');
+            let comps;
+            try {
+                comps = JSON.parse(localStorage.getItem('selectedComponents') || '[]');
+            } catch (e) {
+                comps = [];
+            }
+            if (!Array.isArray(comps) || comps.length === 0) {
+                const msg = document.createElement('p');
+                msg.textContent = 'No components were built. Please return to the System Selection page and build your system.';
+                container.appendChild(msg);
+                return;
+            }
+            // Compute counts to assign numbers for duplicates
+            const totalCounts = {};
+            comps.forEach(t => totalCounts[t] = (totalCounts[t] || 0) + 1);
+            const runningCounts = {};
+            // Helper functions to generate alert options for each type
+            function storageAlerts(compIndex) {
+                return `
+                <div class="alert-row">
+                    <label class="enable-label"><input type="checkbox" id="sv-high-${compIndex}"> Enable</label>
+                    <span class="alert-name">High Alarm</span>
+                    <div class="unit-options">
+                        <label><input type="radio" name="sv-high-unit-${compIndex}" value="mm" checked> mm</label>
+                        <label><input type="radio" name="sv-high-unit-${compIndex}" value="%"> %</label>
+                        <label><input type="radio" name="sv-high-unit-${compIndex}" value="L"> L</label>
+                    </div>
+                    <input type="text" id="sv-high-threshold-${compIndex}" placeholder="Threshold">
+                </div>
+                <div class="alert-row">
+                    <label class="enable-label"><input type="checkbox" id="sv-highhigh-${compIndex}"> Enable</label>
+                    <span class="alert-name">High High Alarm</span>
+                    <div class="unit-options">
+                        <label><input type="radio" name="sv-highhigh-unit-${compIndex}" value="mm" checked> mm</label>
+                        <label><input type="radio" name="sv-highhigh-unit-${compIndex}" value="%"> %</label>
+                        <label><input type="radio" name="sv-highhigh-unit-${compIndex}" value="L"> L</label>
+                    </div>
+                    <input type="text" id="sv-highhigh-threshold-${compIndex}" placeholder="Threshold">
+                </div>
+                <div class="alert-row">
+                    <label class="enable-label"><input type="checkbox" id="sv-low-${compIndex}"> Enable</label>
+                    <span class="alert-name">Low Alarm</span>
+                    <div class="unit-options">
+                        <label><input type="radio" name="sv-low-unit-${compIndex}" value="mm" checked> mm</label>
+                        <label><input type="radio" name="sv-low-unit-${compIndex}" value="%"> %</label>
+                        <label><input type="radio" name="sv-low-unit-${compIndex}" value="L"> L</label>
+                    </div>
+                    <input type="text" id="sv-low-threshold-${compIndex}" placeholder="Threshold">
+                </div>
+                <div class="alert-row">
+                    <label class="enable-label"><input type="checkbox" id="sv-lowlow-${compIndex}"> Enable</label>
+                    <span class="alert-name">Low Low Alarm</span>
+                    <div class="unit-options">
+                        <label><input type="radio" name="sv-lowlow-unit-${compIndex}" value="mm" checked> mm</label>
+                        <label><input type="radio" name="sv-lowlow-unit-${compIndex}" value="%"> %</label>
+                        <label><input type="radio" name="sv-lowlow-unit-${compIndex}" value="L"> L</label>
+                    </div>
+                    <input type="text" id="sv-lowlow-threshold-${compIndex}" placeholder="Threshold">
+                </div>
+                `;
+            }
+            function pumpAlerts(compIndex) {
+                return `
+                <div class="form-group alert-row"><label class="enable-label"><input type="checkbox" id="pump-runtime-${compIndex}"> Enable</label><span class="alert-name">Run Time Exceeded</span></div>
+                <div class="form-group alert-row"><label class="enable-label"><input type="checkbox" id="pump-starts-${compIndex}"> Enable</label><span class="alert-name">Number of Starts Exceeded</span></div>
+                <div class="form-group alert-row"><label class="enable-label"><input type="checkbox" id="pump-failed-start-${compIndex}"> Enable</label><span class="alert-name">Failed to Start</span></div>
+                <div class="form-group alert-row"><label class="enable-label"><input type="checkbox" id="pump-failed-stop-${compIndex}"> Enable</label><span class="alert-name">Failed to Stop</span></div>
+                `;
+            }
+            function stirrerAlerts(compIndex) {
+                return `
+                <div class="form-group alert-row"><label class="enable-label"><input type="checkbox" id="stirrer-runtime-${compIndex}"> Enable</label><span class="alert-name">Run Time Exceeded</span></div>
+                <div class="form-group alert-row"><label class="enable-label"><input type="checkbox" id="stirrer-starts-${compIndex}"> Enable</label><span class="alert-name">Number of Starts Exceeded</span></div>
+                <div class="form-group alert-row"><label class="enable-label"><input type="checkbox" id="stirrer-failed-start-${compIndex}"> Enable</label><span class="alert-name">Failed to Start</span></div>
+                <div class="form-group alert-row"><label class="enable-label"><input type="checkbox" id="stirrer-failed-stop-${compIndex}"> Enable</label><span class="alert-name">Failed to Stop</span></div>
+                `;
+            }
+            function valveAlerts(compIndex) {
+                return `
+                <div class="form-group alert-row"><label class="enable-label"><input type="checkbox" id="valve-open-${compIndex}"> Enable</label><span class="alert-name">Valve Stuck Open</span></div>
+                <div class="form-group alert-row"><label class="enable-label"><input type="checkbox" id="valve-closed-${compIndex}"> Enable</label><span class="alert-name">Valve Stuck Closed</span></div>
+                <div class="form-group alert-row"><label class="enable-label"><input type="checkbox" id="valve-fault-${compIndex}"> Enable</label><span class="alert-name">Valve Position Fault</span></div>
+                `;
+            }
+            function flowRateAlerts(compIndex) {
+                return `
+<div class="alert-row">
+                    <label class="enable-label"><input type="checkbox" id="fr-high-${compIndex}"> Enable</label>
+                    <span class="alert-name">Flow Rate High</span>
+                    <input type="text" id="fr-high-threshold-${compIndex}" placeholder="Threshold">
+                </div>
+<div class="alert-row">
+                    <label class="enable-label"><input type="checkbox" id="fr-low-${compIndex}"> Enable</label>
+                    <span class="alert-name">Flow Rate Low</span>
+                    <input type="text" id="fr-low-threshold-${compIndex}" placeholder="Threshold">
+                </div>
+                `;
+            }
+            function flowVolumeAlerts(compIndex) {
+                return `
+                <div class="form-group alert-row">
+                    <label class="enable-label"><input type="checkbox" id="fv-high-${compIndex}"> Enable</label>
+                    <span class="alert-name">Volume High</span>
+                    <input type="text" id="fv-high-threshold-${compIndex}" placeholder="Threshold">
+                </div>
+                <div class="form-group alert-row">
+                    <label class="enable-label"><input type="checkbox" id="fv-low-${compIndex}"> Enable</label>
+                    <span class="alert-name">Volume Low</span>
+                    <input type="text" id="fv-low-threshold-${compIndex}" placeholder="Threshold">
+                </div>
+                `;
+            }
+            function pressureAlerts(compIndex) {
+                return `
+                <div class="form-group alert-row">
+                    <label class="enable-label"><input type="checkbox" id="pressure-high-${compIndex}"> Enable</label>
+                    <span class="alert-name">Pressure High</span>
+                    <input type="text" id="pressure-high-threshold-${compIndex}" placeholder="Threshold">
+                </div>
+                <div class="form-group alert-row">
+                    <label class="enable-label"><input type="checkbox" id="pressure-low-${compIndex}"> Enable</label>
+                    <span class="alert-name">Pressure Low</span>
+                    <input type="text" id="pressure-low-threshold-${compIndex}" placeholder="Threshold">
+                </div>
+                `;
+            }
+            function irrigatorAlerts(compIndex) {
+                return `
+                <div class="form-group alert-row"><label class="enable-label"><input type="checkbox" id="irr-flow-high-${compIndex}"> Enable</label><span class="alert-name">Irrigator Flow High</span></div>
+                <div class="form-group alert-row"><label class="enable-label"><input type="checkbox" id="irr-flow-low-${compIndex}"> Enable</label><span class="alert-name">Irrigator Flow Low</span></div>
+                <div class="form-group alert-row"><label class="enable-label"><input type="checkbox" id="irr-pressure-${compIndex}"> Enable</label><span class="alert-name">Irrigator Pressure Alarm</span></div>
+                `;
+            }
+            function timerAlerts(compIndex) {
+                return `
+                <div class="form-group alert-row"><label class="enable-label"><input type="checkbox" id="timer-on-delay-${compIndex}"> Enable</label><span class="alert-name">On Delay Exceeded</span></div>
+                <div class="form-group alert-row"><label class="enable-label"><input type="checkbox" id="timer-off-delay-${compIndex}"> Enable</label><span class="alert-name">Off Delay Exceeded</span></div>
+                `;
+            }
+            function safetyAlerts(compIndex) {
+                return `
+                <div class="form-group alert-row"><label class="enable-label"><input type="checkbox" id="safety-trigger-${compIndex}"> Enable</label><span class="alert-name">Safety Triggered</span></div>
+                <div class="form-group alert-row"><label class="enable-label"><input type="checkbox" id="safety-reset-${compIndex}"> Enable</label><span class="alert-name">Safety Reset</span></div>
+                `;
+            }
+            // Main generator function for a component's alerts
+            function getAlertsHTML(type, displayName, compIndex) {
+                // Use a custom alert-list container instead of the generic config-grid to control layout
+                let html = `<h2>${displayName} Alerts</h2><div class="alert-list">`;
+                // Normalize storage vessel synonyms
+                if (type === 'Storage Vessel' || type === 'Water Tank' || type === 'Pond' || type === 'Sump') {
+                    html += storageAlerts(compIndex);
+                } else if (type === 'Pump') {
+                    html += pumpAlerts(compIndex);
+                } else if (type === 'Stirrer') {
+                    html += stirrerAlerts(compIndex);
+                } else if (type === 'Valve') {
+                    html += valveAlerts(compIndex);
+                } else if (type.startsWith('Flow Meter') && type.includes('Flow Rate')) {
+                    html += flowRateAlerts(compIndex);
+                } else if (type.startsWith('Flow Meter') && type.includes('Flow Volume')) {
+                    html += flowVolumeAlerts(compIndex);
+                } else if (type === 'Pressure') {
+                    html += pressureAlerts(compIndex);
+                } else if (type === 'Irrigator') {
+                    html += irrigatorAlerts(compIndex);
+                } else if (type === 'Timer') {
+                    html += timerAlerts(compIndex);
+                } else if (type === 'Safeties') {
+                    html += safetyAlerts(compIndex);
+                } else {
+                    // Default generic: single alert to indicate generic fault
+                    html += `<div class="form-group"><label><input type="checkbox" id="generic-fault-${compIndex}"> Fault Alarm</label></div>`;
+                }
+                html += '</div>';
+                return html;
+            }
+            // Generate sections for each selected component
+            comps.forEach((type, index) => {
+                runningCounts[type] = (runningCounts[type] || 0) + 1;
+                const number = runningCounts[type];
+                const displayName = totalCounts[type] > 1 ? `${type} ${number}` : type;
+                const section = document.createElement('div');
+                section.classList.add('alert-config');
+                section.innerHTML = getAlertsHTML(type, displayName, index);
+                container.appendChild(section);
+            });
+        });
+        </script>
+    </div>
+</body>
+</html>
