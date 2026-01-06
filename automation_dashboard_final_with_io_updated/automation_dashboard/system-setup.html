@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Automation Telemetry Dashboard – System Set up</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+    <nav>
+        <a href="customer-details.html" class="nav-step completed">1. Customer Details</a>
+        <a href="payment.html" class="nav-step completed">2. Payment</a>
+        <a href="system-selection.html" class="nav-step completed">3. System Selection</a>
+        <a href="system-setup.html" class="nav-step active">4. System Set up</a>
+        <a href="alerts-alarms.html" class="nav-step">5. Alerts &amp; Alarms</a>
+        <a href="escalations.html" class="nav-step">6. Escalations</a>
+        <a href="io-wiring.html" class="nav-step">7. IO / Wiring Diagrams</a>
+    </nav>
+</header>
+<div class="content">
+    <h1>System Set up</h1>
+    <p>Configure your selected system. Each section below corresponds to a component you added on the System Selection page. You can rename, select types, set variables and enable or disable the component.</p>
+    <div id="setup-container"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const container = document.getElementById('setup-container');
+            // Retrieve selected component types from localStorage
+            let comps;
+            try {
+                comps = JSON.parse(localStorage.getItem('selectedComponents') || '[]');
+            } catch (e) {
+                comps = [];
+            }
+            if (!Array.isArray(comps) || comps.length === 0) {
+                const msg = document.createElement('p');
+                msg.textContent = 'No components were selected. Please return to the System Selection page and build your system.';
+                container.appendChild(msg);
+                return;
+            }
+            // Define a template generator for each component type
+            function getComponentTemplate(type, index, displayName) {
+                /*
+                 * Pump configuration: includes name/tag, starter selection, maximum start/stop times, momentary stop delay,
+                 * polarity selections, start count and interval, plus VSD‑specific fields (Setpoint, Min/Max speed, Notes).
+                 */
+                function pumpTemplate(name) {
+                    return `
+                        <h2>${name}</h2>
+                        <div class="config-grid">
+                            <div class="form-group">
+                                <label for="pump-name-${index}">Name / Tag</label>
+                                <input type="text" id="pump-name-${index}" placeholder="Enter name or tag">
+                            </div>
+                            <div class="form-group">
+                                <label for="pump-starter-${index}">Starter</label>
+                                <select id="pump-starter-${index}" onchange="toggleVSDFields(${index}, this)">
+                                    <option value="DOL">DOL</option>
+                                    <option value="Soft Starter">Soft Starter</option>
+                                    <option value="VSD">VSD</option>
+                                </select>
+                                <small>Select the type of starter your system is using</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="pump-maxstart-${index}">MaxStartTime</label>
+                                <input type="text" id="pump-maxstart-${index}" placeholder="00:00:30">
+                                <small>Maximum amount of time the motor is allowed to take to start</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="pump-maxstop-${index}">MaxStopTime</label>
+                                <input type="text" id="pump-maxstop-${index}" placeholder="00:00:30">
+                                <small>Maximum amount of time the motor is allowed to take to stop</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="pump-momentary-${index}">MomentaryStopDelay</label>
+                                <input type="text" id="pump-momentary-${index}" placeholder="00:00:10">
+                                <small>Maximum amount of time the motor is allowed to stop while running</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="pump-faultpol-${index}">FaultInputPolarity</label>
+                                <select id="pump-faultpol-${index}">
+                                    <option value="Live for Faulted">Live for Faulted</option>
+                                    <option value="Live for NotFaulted">Live for NotFaulted</option>
+                                </select>
+                                <small>The polarity of the external fault input</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="pump-runpol-${index}">RunInputPolarity</label>
+                                <select id="pump-runpol-${index}">
+                                    <option value="Live for Running">Live for Running</option>
+                                    <option value="Live for Stopped">Live for Stopped</option>
+                                </select>
+                                <small>The polarity of the Run Feedback input</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="pump-startcount-${index}">Number of starts</label>
+                                <input type="number" id="pump-startcount-${index}" min="0" placeholder="0">
+                                <small>The number of times the motor can start in the allocated time period</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="pump-startinterval-${index}">Number of starts interval</label>
+                                <input type="text" id="pump-startinterval-${index}" placeholder="01:00:00">
+                                <small>The time interval that the number of starts is applied to</small>
+                            </div>
+                        </div>
+                        <div id="pump-vsd-${index}" class="vsd-fields hidden">
+                            <div class="config-grid">
+                                <div class="form-group">
+                                    <label for="pump-setpoint-${index}">Setpoint (bar)</label>
+                                    <input type="number" id="pump-setpoint-${index}" step="any">
+                                </div>
+                                <div class="form-group">
+                                    <label for="pump-minspeed-${index}">Min Speed (%)</label>
+                                    <input type="number" id="pump-minspeed-${index}" step="any">
+                                </div>
+                                <div class="form-group">
+                                    <label for="pump-maxspeed-${index}">Max Speed (%)</label>
+                                    <input type="number" id="pump-maxspeed-${index}" step="any">
+                                </div>
+                                <div class="form-group" style="grid-column: 1 / -1;">
+                                    <label for="pump-notes-${index}">Notes</label>
+                                    <textarea id="pump-notes-${index}" rows="3"></textarea>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                /*
+                 * Valve configuration: Name/Tag, type selection, action, coil voltage (only for solenoid), notes.
+                 */
+                function valveTemplate(name) {
+                    return `
+                        <h2>${name}</h2>
+                        <div class="config-grid">
+                            <div class="form-group">
+                                <label for="valve-name-${index}">Name / Tag</label>
+                                <input type="text" id="valve-name-${index}" placeholder="Enter name or tag">
+                            </div>
+                            <div class="form-group">
+                                <label for="valve-type-${index}">Type</label>
+                                <select id="valve-type-${index}" onchange="toggleValveFields(${index}, this)">
+                                    <option value="Solenoid">Solenoid</option>
+                                    <option value="Actuator">Actuator</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="valve-action-${index}">Action</label>
+                                <select id="valve-action-${index}">
+                                    <option value="NO">NO</option>
+                                    <option value="NC">NC</option>
+                                </select>
+                            </div>
+                            <div id="coil-group-${index}" class="form-group">
+                                <label for="coil-voltage-${index}">Coil Voltage (V)</label>
+                                <input type="number" id="coil-voltage-${index}" step="any">
+                            </div>
+                            <div class="form-group" style="grid-column: 1 / -1;">
+                                <label for="valve-notes-${index}">Notes</label>
+                                <textarea id="valve-notes-${index}" rows="3"></textarea>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                /*
+                 * Flow rate configuration: Name/Tag, input type, unit, min/max range in unit, notes.
+                 */
+                function flowRateTemplate(name) {
+                    return `
+                        <h2>${name}</h2>
+                        <div class="config-grid">
+                            <div class="form-group">
+                                <label for="flowrate-name-${index}">Name / Tag</label>
+                                <input type="text" id="flowrate-name-${index}" placeholder="Enter name or tag">
+                            </div>
+                            <div class="form-group">
+                                <label for="flowrate-input-${index}">Input Type</label>
+                                <select id="flowrate-input-${index}">
+                                    <option value="4-20 mA">4-20 mA</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="flowrate-unit-${index}">Unit</label>
+                                <select id="flowrate-unit-${index}" onchange="updateFlowRateUnit(${index}, this)">
+                                    <option value="L/s">L/s</option>
+                                    <option value="m3/h">m³/h</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="flowrate-max-${index}">Range Max (<span id="flowrate-unit-max-${index}">L/s</span>)</label>
+                                <input type="number" id="flowrate-max-${index}" step="any">
+                            </div>
+                            <div class="form-group">
+                                <label for="flowrate-min-${index}">Range Min (<span id="flowrate-unit-min-${index}">L/s</span>)</label>
+                                <input type="number" id="flowrate-min-${index}" step="any">
+                            </div>
+                            <div class="form-group" style="grid-column: 1 / -1;">
+                                <label for="flowrate-notes-${index}">Notes</label>
+                                <textarea id="flowrate-notes-${index}" rows="3"></textarea>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                /*
+                 * Flow volume configuration: Name/Tag, pulses per unit, unit selection, debounce ms, notes.
+                 */
+                function flowVolumeTemplate(name) {
+                    return `
+                        <h2>${name}</h2>
+                        <div class="config-grid">
+                            <div class="form-group">
+                                <label for="flowvol-name-${index}">Name / Tag</label>
+                                <input type="text" id="flowvol-name-${index}" placeholder="Enter name or tag">
+                            </div>
+                            <div class="form-group">
+                                <label for="flowvol-pulses-${index}">Pulses per Unit</label>
+                                <input type="number" id="flowvol-pulses-${index}" step="any">
+                            </div>
+                            <div class="form-group">
+                                <label for="flowvol-unit-${index}">Unit</label>
+                                <select id="flowvol-unit-${index}">
+                                    <option value="L">L</option>
+                                    <option value="m3">m³</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="flowvol-debounce-${index}">Debounce (ms)</label>
+                                <input type="number" id="flowvol-debounce-${index}" step="any">
+                            </div>
+                            <div class="form-group" style="grid-column: 1 / -1;">
+                                <label for="flowvol-notes-${index}">Notes</label>
+                                <textarea id="flowvol-notes-${index}" rows="3"></textarea>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                /*
+                 * Pressure configuration: Name/Tag, transducer range selection, unit, optional custom min/max range, notes.
+                 */
+                function pressureTemplate(name) {
+                    return `
+                        <h2>${name}</h2>
+                        <div class="config-grid">
+                            <div class="form-group">
+                                <label for="pressure-name-${index}">Name / Tag</label>
+                                <input type="text" id="pressure-name-${index}" placeholder="Enter name or tag">
+                            </div>
+                            <div class="form-group">
+                                <label for="pressure-range-${index}">Transducer Range</label>
+                                <select id="pressure-range-${index}" onchange="togglePressureCustom(${index}, this)">
+                                    <option value="0-1.6 bar">0-1.6 bar</option>
+                                    <option value="0-2 bar">0-2 bar</option>
+                                    <option value="0-6 bar">0-6 bar</option>
+                                    <option value="0-10 bar">0-10 bar</option>
+                                    <option value="Custom">Custom</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="pressure-unit-${index}">Unit</label>
+                                <select id="pressure-unit-${index}">
+                                    <option value="kPa">kPa</option>
+                                    <option value="PSI">PSI</option>
+                                    <option value="Bar">Bar</option>
+                                </select>
+                            </div>
+                            <div id="pressure-custom-${index}" class="custom-pressure hidden">
+                                <div class="form-group">
+                                    <label for="pressure-min-${index}">Range Min</label>
+                                    <input type="number" id="pressure-min-${index}" step="any">
+                                </div>
+                                <div class="form-group">
+                                    <label for="pressure-max-${index}">Range Max</label>
+                                    <input type="number" id="pressure-max-${index}" step="any">
+                                </div>
+                            </div>
+                            <div class="form-group" style="grid-column: 1 / -1;">
+                                <label for="pressure-notes-${index}">Notes</label>
+                                <textarea id="pressure-notes-${index}" rows="3"></textarea>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                /*
+                 * Irrigator configuration: Irrigator type with optional subtype, maximum pulse interval, distance per pulse,
+                 * end of line mode, notes.
+                 */
+                function irrigatorTemplate(name) {
+                    return `
+                        <h2>${name}</h2>
+                        <div class="config-grid">
+                            <div class="form-group">
+                                <label for="irrigator-type-${index}">Irrigator Type</label>
+                                <select id="irrigator-type-${index}" onchange="toggleIrrigatorType(${index}, this)">
+                                    <option value="Travelling Irrigator">Travelling Irrigator</option>
+                                    <option value="K-line / Pods">K-line / Pods</option>
+                                    <option value="Pivot (Underslung, Stationary Cannon)">Pivot (Underslung, Stationary Cannon)</option>
+                                </select>
+                            </div>
+                            <div id="irrigator-subtype-container-${index}" class="form-group">
+                                <label for="irrigator-subtype-${index}">Type</label>
+                                <select id="irrigator-subtype-${index}">
+                                    <option value="Williams">Williams</option>
+                                    <option value="Cobra">Cobra</option>
+                                    <option value="Torpedo">Torpedo</option>
+                                    <option value="Weta">Weta</option>
+                                    <option value="Southisland ones">Southisland ones</option>
+                                    <option value="Custom">Custom</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="irrigator-maxinterval-${index}">Maximum Wheel Pulse Interval</label>
+                                <input type="text" id="irrigator-maxinterval-${index}" placeholder="01:00:00">
+                                <small>Max time allowed between pulses before irrigator is considered not moving</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="irrigator-distance-${index}">Distance per wheel pulse (m)</label>
+                                <input type="number" id="irrigator-distance-${index}" step="any">
+                            </div>
+                            <div class="form-group">
+                                <label for="irrigator-endmode-${index}">End of line mode</label>
+                                <select id="irrigator-endmode-${index}">
+                                    <option value="Maintained">Maintained</option>
+                                    <option value="Pulsed">Pulsed</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="grid-column: 1 / -1;">
+                                <label for="irrigator-notes-${index}">Notes</label>
+                                <textarea id="irrigator-notes-${index}" rows="3"></textarea>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                /*
+                 * Safeties configuration: Mode selection (Halo Controlled vs External) plus cut‑out options visible only when Halo Controlled,
+                 * notes.
+                 */
+                function safetiesTemplate(name) {
+                    return `
+                        <h2>${name}</h2>
+                        <div class="config-grid">
+                            <div class="form-group">
+                                <label for="safety-mode-${index}">Mode</label>
+                                <select id="safety-mode-${index}" onchange="toggleSafetyFields(${index}, this)">
+                                    <option value="Halo Controlled">Halo Controlled</option>
+                                    <option value="External">External</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div id="safety-details-${index}" class="safety-details">
+                            <div class="config-grid">
+                                <div class="form-group">
+                                    <div style="display:flex; align-items:center; gap:0.5rem;">
+                                        <input type="checkbox" id="low-pressure-enable-${index}">
+                                        <label for="low-pressure-enable-${index}"><strong>Low Pressure Cut out</strong></label>
+                                    </div>
+                                    <input type="number" id="low-pressure-value-${index}" placeholder="Pressure Unit">
+                                </div>
+                                <div class="form-group">
+                                    <div style="display:flex; align-items:center; gap:0.5rem;">
+                                        <input type="checkbox" id="high-pressure-enable-${index}">
+                                        <label for="high-pressure-enable-${index}"><strong>High Pressure Cut out</strong></label>
+                                    </div>
+                                    <input type="number" id="high-pressure-value-${index}" placeholder="Pressure Unit">
+                                </div>
+                                <div class="form-group">
+                                    <div style="display:flex; align-items:center; gap:0.5rem;">
+                                        <input type="checkbox" id="low-flow-enable-${index}">
+                                        <label for="low-flow-enable-${index}"><strong>Low Flow Cut out</strong></label>
+                                    </div>
+                                    <input type="number" id="low-flow-value-${index}" placeholder="Flow Unit">
+                                </div>
+                                <div class="form-group">
+                                    <div style="display:flex; align-items:center; gap:0.5rem;">
+                                        <input type="checkbox" id="high-flow-enable-${index}">
+                                        <label for="high-flow-enable-${index}"><strong>High Flow Cut out</strong></label>
+                                    </div>
+                                    <input type="number" id="high-flow-value-${index}" placeholder="Flow Unit">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="config-grid">
+                            <div class="form-group" style="grid-column: 1 / -1;">
+                                <label for="safety-notes-${index}">Notes</label>
+                                <textarea id="safety-notes-${index}" rows="3"></textarea>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                // Storage vessel template remains unchanged (from previous implementation)
+                function storageTemplate(name) {
+                    let vesselOptions = '<option value="Tank">Tank</option><option value="Pond">Pond</option><option value="Sump">Sump</option>';
+                    return `
+                        <h2>${name}</h2>
+                        <div class="config-grid">
+                            <div class="form-group">
+                                <label for="name-${index}">Give your ${name.toLowerCase()} a name</label>
+                                <input type="text" id="name-${index}" placeholder="Enter name">
+                            </div>
+                            <div class="form-group">
+                                <label for="tag-${index}">Give your ${name.toLowerCase()} an ID #</label>
+                                <input type="text" id="tag-${index}" placeholder="Enter ID #">
+                            </div>
+                            <div class="form-group">
+                                <label for="vessel-type-${index}">Select Vessel Type</label>
+                                <select id="vessel-type-${index}">
+                                    ${vesselOptions}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="sensor-range-${index}">Select the Sensor Range (4-20mA)</label>
+                                <select id="sensor-range-${index}" onchange="handleSensorRangeChange(${index}, this)">
+                                    <option value="2.5">2.5m</option>
+                                    <option value="5">5m</option>
+                                    <option value="6">6m</option>
+                                    <option value="10">10m</option>
+                                    <option value="Custom">Custom</option>
+                                </select>
+                            </div>
+                            <div class="form-group sensor-custom-${index}" style="display:none;">
+                                <label for="range-4ma-${index}">4mA (m)</label>
+                                <input type="text" id="range-4ma-${index}" placeholder="0">
+                            </div>
+                            <div class="form-group sensor-custom-${index}" style="display:none;">
+                                <label for="range-20ma-${index}">20mA (m)</label>
+                                <input type="text" id="range-20ma-${index}" placeholder="Enter range">
+                            </div>
+                            <div class="form-group">
+                                <label><input type="checkbox" id="fill-enable-${index}" onchange="toggleFillControl(${index}, this)"> Enable Fill Pump Level Control</label>
+                            </div>
+                            <div class="fill-control-${index}" style="display:none;">
+                                <div class="form-group">
+                                    <label for="fill-unit-${index}">Select Fill Measurement Unit</label>
+                                    <select id="fill-unit-${index}" onchange="updateFillUnit(${index}, this)">
+                                        <option value="level">Water Level</option>
+                                        <option value="percentage">Percentage</option>
+                                        <option value="volume">Volume</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="fill-start-${index}">Start (<span id="fill-start-unit-${index}">m</span>)</label>
+                                    <input type="text" id="fill-start-${index}">
+                                </div>
+                                <div class="form-group">
+                                    <label for="fill-stop-${index}">Stop (<span id="fill-stop-unit-${index}">m</span>)</label>
+                                    <input type="text" id="fill-stop-${index}">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label><input type="checkbox" id="dist-enable-${index}" onchange="toggleDistControl(${index}, this)"> Enable Distribution Pump Level Control</label>
+                            </div>
+                            <div class="dist-control-${index}" style="display:none;">
+                                <div class="form-group">
+                                    <label for="dist-unit-${index}">Select Distribution Measurement Unit</label>
+                                    <select id="dist-unit-${index}" onchange="updateDistUnit(${index}, this)">
+                                        <option value="level">Water Level</option>
+                                        <option value="percentage">Percentage</option>
+                                        <option value="volume">Volume</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="dist-start-${index}">Start (<span id="dist-start-unit-${index}">m</span>)</label>
+                                    <input type="text" id="dist-start-${index}">
+                                </div>
+                                <div class="form-group">
+                                    <label for="dist-stop-${index}">Stop (<span id="dist-stop-unit-${index}">m</span>)</label>
+                                    <input type="text" id="dist-stop-${index}">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="fill-delay-${index}">Fill Delay</label>
+                                <input type="text" id="fill-delay-${index}" placeholder="30s">
+                            </div>
+                        </div>
+                    `;
+                }
+                // Timer template (Name, Tag, on/off delay)
+                function timerTemplate(name) {
+                    return `
+                        <h2>${name}</h2>
+                        <div class="config-grid">
+                            <div class="form-group">
+                                <label for="name-${index}">Give your ${name.toLowerCase()} a name</label>
+                                <input type="text" id="name-${index}" placeholder="Enter name">
+                            </div>
+                            <div class="form-group">
+                                <label for="tag-${index}">Give your ${name.toLowerCase()} an ID #</label>
+                                <input type="text" id="tag-${index}" placeholder="Enter ID #">
+                            </div>
+                            <div class="form-group">
+                                <label for="timer-on-delay-${index}">On Delay</label>
+                                <input type="text" id="timer-on-delay-${index}" placeholder="00:00:05">
+                            </div>
+                            <div class="form-group">
+                                <label for="timer-off-delay-${index}">Off Delay</label>
+                                <input type="text" id="timer-off-delay-${index}" placeholder="00:00:05">
+                            </div>
+                        </div>
+                    `;
+                }
+                // Generic template for unknown devices or simple devices not yet customised
+                function generalTemplate(name) {
+                    return `
+                        <h2>${name}</h2>
+                        <div class="config-grid">
+                            <div class="form-group">
+                                <label for="gen-name-${index}">Name / Tag</label>
+                                <input type="text" id="gen-name-${index}" placeholder="Enter name or tag">
+                            </div>
+                            <div class="form-group">
+                                <label for="gen-type-a-${index}">Type A</label>
+                                <input type="text" id="gen-type-a-${index}" placeholder="Type A">
+                            </div>
+                            <div class="form-group">
+                                <label for="gen-type-b-${index}">Type B</label>
+                                <input type="text" id="gen-type-b-${index}" placeholder="Type B">
+                            </div>
+                            <div class="form-group">
+                                <label for="gen-notes-${index}">Notes</label>
+                                <textarea id="gen-notes-${index}" rows="3"></textarea>
+                            </div>
+                        </div>
+                    `;
+                }
+                // Determine which template to use based on the component type
+                if (type === 'Pump') {
+                    return pumpTemplate(displayName || type);
+                } else if (type === 'Valve') {
+                    return valveTemplate(displayName || type);
+                } else if (type.startsWith('Flow Meter') && type.includes('Flow Rate')) {
+                    return flowRateTemplate(displayName || type);
+                } else if (type.startsWith('Flow Meter') && type.includes('Flow Volume')) {
+                    return flowVolumeTemplate(displayName || type);
+                } else if (type === 'Pressure') {
+                    return pressureTemplate(displayName || type);
+                } else if (type === 'Irrigator') {
+                    return irrigatorTemplate(displayName || type);
+                } else if (type === 'Safeties') {
+                    return safetiesTemplate(displayName || type);
+                } else if (type === 'Timer') {
+                    return timerTemplate(displayName || type);
+                } else if (type === 'Water Tank' || type === 'Pond' || type === 'Sump' || type === 'Storage Vessel') {
+                    return storageTemplate(displayName || type);
+                } else {
+                    return generalTemplate(displayName || type);
+                }
+            }
+
+            // Event handlers for storage vessel dynamic behaviours
+            window.handleSensorRangeChange = function(index, selectEl) {
+                const customFields = document.querySelectorAll('.sensor-custom-' + index);
+                if (selectEl.value === 'Custom') {
+                    customFields.forEach(el => el.style.display = 'block');
+                } else {
+                    customFields.forEach(el => el.style.display = 'none');
+                    // Optionally set 4mA and 20mA fields based on preset range
+                    const range = parseFloat(selectEl.value);
+                    const four = document.getElementById('range-4ma-' + index);
+                    const twenty = document.getElementById('range-20ma-' + index);
+                    if (four && twenty && !isNaN(range)) {
+                        four.value = '0';
+                        twenty.value = range.toString();
+                    }
+                }
+            };
+            window.toggleFillControl = function(index, checkbox) {
+                const section = document.querySelector('.fill-control-' + index);
+                if (section) {
+                    section.style.display = checkbox.checked ? 'block' : 'none';
+                }
+            };
+            window.toggleDistControl = function(index, checkbox) {
+                const section = document.querySelector('.dist-control-' + index);
+                if (section) {
+                    section.style.display = checkbox.checked ? 'block' : 'none';
+                }
+            };
+            window.updateFillUnit = function(index, selectEl) {
+                const unit = selectEl.value;
+                const unitSpanStart = document.getElementById('fill-start-unit-' + index);
+                const unitSpanStop = document.getElementById('fill-stop-unit-' + index);
+                const display = unit === 'level' ? 'm' : unit === 'percentage' ? '%' : unit === 'volume' ? 'L' : '';
+                if (unitSpanStart) unitSpanStart.textContent = display;
+                if (unitSpanStop) unitSpanStop.textContent = display;
+            };
+            window.updateDistUnit = function(index, selectEl) {
+                const unit = selectEl.value;
+                const unitSpanStart = document.getElementById('dist-start-unit-' + index);
+                const unitSpanStop = document.getElementById('dist-stop-unit-' + index);
+                const display = unit === 'level' ? 'm' : unit === 'percentage' ? '%' : unit === 'volume' ? 'L' : '';
+                if (unitSpanStart) unitSpanStart.textContent = display;
+                if (unitSpanStop) unitSpanStop.textContent = display;
+            };
+
+            // Pump: Show/hide VSD‑specific fields based on starter selection
+            window.toggleVSDFields = function(index, selectEl) {
+                const vsdDiv = document.getElementById('pump-vsd-' + index);
+                if (vsdDiv) {
+                    vsdDiv.style.display = selectEl.value === 'VSD' ? 'block' : 'none';
+                }
+            };
+            // Valve: show coil voltage only for Solenoid type
+            window.toggleValveFields = function(index, selectEl) {
+                const coilGroup = document.getElementById('coil-group-' + index);
+                if (coilGroup) {
+                    coilGroup.style.display = selectEl.value === 'Solenoid' ? 'block' : 'none';
+                }
+            };
+            // Flow rate: update unit labels when unit selection changes
+            window.updateFlowRateUnit = function(index, selectEl) {
+                const val = selectEl.value;
+                const unitMax = document.getElementById('flowrate-unit-max-' + index);
+                const unitMin = document.getElementById('flowrate-unit-min-' + index);
+                // Display the same string as the option value, but with superscript for cubic metres if needed
+                let display = val;
+                if (val === 'm3/h') {
+                    display = 'm³/h';
+                }
+                if (unitMax) unitMax.textContent = display;
+                if (unitMin) unitMin.textContent = display;
+            };
+            // Pressure: toggle custom min/max fields
+            window.togglePressureCustom = function(index, selectEl) {
+                const customDiv = document.getElementById('pressure-custom-' + index);
+                if (customDiv) {
+                    customDiv.style.display = selectEl.value === 'Custom' ? 'block' : 'none';
+                }
+            };
+            // Irrigator: toggle subtype selection for Travelling Irrigator
+            window.toggleIrrigatorType = function(index, selectEl) {
+                const subContainer = document.getElementById('irrigator-subtype-container-' + index);
+                if (subContainer) {
+                    subContainer.style.display = selectEl.value === 'Travelling Irrigator' ? 'block' : 'none';
+                }
+            };
+            // Safeties: show/hide cut out options based on mode
+            window.toggleSafetyFields = function(index, selectEl) {
+                const details = document.getElementById('safety-details-' + index);
+                if (details) {
+                    details.style.display = selectEl.value === 'Halo Controlled' ? 'block' : 'none';
+                }
+            };
+
+            // Compute total counts for each type to determine numbering for duplicates
+            const totalCounts = {};
+            comps.forEach(type => {
+                totalCounts[type] = (totalCounts[type] || 0) + 1;
+            });
+            const runningCounts = {};
+            // For each component type, create and insert the template with numbering if duplicates exist
+            comps.forEach((compType, index) => {
+                runningCounts[compType] = (runningCounts[compType] || 0) + 1;
+                const number = runningCounts[compType];
+                // Determine display name: append number if there are multiple of this type
+                const displayName = totalCounts[compType] > 1 ? `${compType} ${number}` : compType;
+                const section = document.createElement('div');
+                section.classList.add('component-config');
+                section.innerHTML = getComponentTemplate(compType, index, displayName);
+                container.appendChild(section);
+            });
+        });
+    </script>
+</div>
+</body>
+</html>
